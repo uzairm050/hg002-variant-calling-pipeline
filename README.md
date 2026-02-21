@@ -58,11 +58,14 @@ To confirm the full SLURM + Nextflow + Singularity stack works on this cluster, 
 **Step 1 — Clone the repository:**
 git clone https://github.com/uzairm050/hg002-variant-calling-pipeline.git
 cd hg002-variant-calling-pipeline
+
 **Step 2 — Submit the pipeline to SLURM + Nextflow + Singularity:**
 sbatch nextflow_pipeline.sh
+
 **Step 3 — Monitor progress:**
 squeue -u your_username
 tail -f logs/nextflow_*.log
+
 > **Resource Note:** The SLURM parameters in the job scripts are configured for a quarter-subset of HG002 data on our cluster. If running on a different cluster or with the full dataset, adjust the following parameters in `nextflow_pipeline.sh` and `pipeline.sh`:
 > - `--cpus-per-task` — increase for faster parallel processing
 > - `--mem` — minimum 64GB recommended for the full HG002 dataset
