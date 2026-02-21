@@ -1,24 +1,33 @@
 # HG002 Variant Calling Pipeline
 
-## Project Summary
+[![SLURM](https://img.shields.io/badge/HPC-SLURM-blue)](https://slurm.schedmd.com/)
+[![Nextflow](https://img.shields.io/badge/workflow-Nextflow-brightgreen)](https://www.nextflow.io/)
+[![Singularity](https://img.shields.io/badge/container-Singularity-orange)](https://apptainer.org/)
+[![GIAB](https://img.shields.io/badge/truth%20set-GIAB%20v4.2.1-red)](https://www.nist.gov/programs-projects/genome-bottle)
 
-This project implements a complete short variant calling pipeline on an HPC cluster using SLURM, Nextflow, and Singularity containers. We process PacBio HiFi sequencing reads from HG002 (a reference human sample maintained by GIAB), identify genetic variants across chromosomes 1-22 using two independent tools, and evaluate their accuracy against a validated truth set.
+## What is this project?
 
-A genetic variant is a position in the genome where an individual's DNA differs from the reference human genome. Identifying these variants accurately is fundamental to genomic research and clinical diagnostics.
+This pipeline takes raw DNA sequencing data from a human sample, finds all the positions where that person's genome differs from the standard human reference genome, and checks how accurately those differences were detected.
 
-## Pipeline Architecture
+We use HG002 — a well-studied reference human sample used worldwide to test genomic tools — and run the full analysis on a high-performance computing cluster using three technologies working together: SLURM for job scheduling, Nextflow for workflow management, and Singularity for containerized tools.
 
-The pipeline uses three core technologies working together:
+---
 
-- **SLURM** — HPC job scheduler that allocates compute resources and queues jobs on the cluster
-- **Nextflow** — Workflow manager that orchestrates and parallelizes pipeline steps, handles container binding, and manages outputs
-- **Singularity/Apptainer** — Container system that packages each bioinformatics tool with all its dependencies for reproducible execution
+## Technologies Used
+
+| Technology | Role |
+|------------|------|
+| **SLURM** | Submits and manages jobs on the HPC cluster, allocates compute resources |
+| **Nextflow** | Orchestrates the pipeline, runs Clair3 and DeepVariant in parallel |
+| **Singularity** | Runs each tool in an isolated, reproducible container |
+
+---
 
 ## How Nextflow Was Used
 
-Nextflow orchestrates the variant calling workflow by running Clair3 and DeepVariant as independent parallel processes. Each tool is defined as a Nextflow `process` block in `variant_calling.nf` and executed inside its own Singularity container.
+Nextflow is the core of this pipeline. It defines Clair3 and DeepVariant as independent `process` blocks in `variant_calling.nf`, runs them in parallel inside their own Singularity containers, and automatically copies outputs to the results folder using `publishDir`.
 
-The workflow was submitted to SLURM using `nextflow_pipeline.sh`, which allocates 8 CPUs and 16GB RAM. Nextflow then manages the execution of each process, handles container binding via `nextflow.config`, and copies outputs to the results directory using `publishDir`.
+The entire workflow is submitted to SLURM with a single command. SLURM allocates the compute resources, and Nextflow takes over from there — managing containers, parallelization, and output handling automatically.
 
 Key Nextflow features used:
 - **DSL2 syntax** — modern Nextflow workflow definition
@@ -27,29 +36,46 @@ Key Nextflow features used:
 - **parallel execution** — Clair3 and DeepVariant run simultaneously
 - **SLURM integration** — job submitted and managed by the HPC scheduler
 
-To verify the SLURM + Nextflow + Singularity integration, the built-in Nextflow hello world pipeline was also successfully executed, confirming the full stack works correctly on this cluster.
+To confirm the full SLURM + Nextflow + Singularity stack works on this cluster, the built-in Nextflow hello world pipeline was also run successfully before the main pipeline.
+
+---
 
 ## Pipeline Steps
 
-1. **Read Alignment** — Raw PacBio HiFi reads aligned to GRCh38 using Minimap2 (map-hifi preset)
-2. **BAM Processing** — Alignment sorted and indexed using Samtools
-3. **Variant Calling with Clair3** — Neural network-based variant caller using hifi_revio model
-4. **Variant Calling with DeepVariant** — Google's deep learning variant caller (PACBIO model)
-5. **Chr1-22 Filtering** — VCF outputs filtered to chromosomes 1-22 using BCFtools
-6. **Benchmarking** — Both VCFs evaluated against GIAB HG002 v4.2.1 truth set using hap.py
+| Step | Tool | Executed Via |
+|------|------|-------------|
+| 1. Align reads to GRCh38 | Minimap2 (map-hifi) | SLURM |
+| 2. Sort and index alignment | Samtools | SLURM |
+| 3. Call variants — Clair3 | Clair3 (hifi_revio model) | Nextflow + Singularity |
+| 4. Call variants — DeepVariant | DeepVariant 1.6.1 (PACBIO model) | Nextflow + Singularity |
+| 5. Filter to chr1-22 | BCFtools | SLURM |
+| 6. Benchmark against truth set | hap.py (vcfeval engine) | SLURM |
+
+---
 
 ## How to Run
 
-### Submit the full pipeline via SLURM + Nextflow + Singularity:
+**Step 1 — Clone the repository:**
+git clone https://github.com/uzairm050/hg002-variant-calling-pipeline.git
+cd hg002-variant-calling-pipeline
+**Step 2 — Submit the pipeline to SLURM + Nextflow + Singularity:**
 sbatch nextflow_pipeline.sh
-### Or run the pipeline directly via SLURM:
-sbatch pipeline.sh
-### Monitor job status:
+**Step 3 — Monitor progress:**
 squeue -u your_username
+tail -f logs/nextflow_*.log
+> **Resource Note:** The SLURM parameters in the job scripts are configured for a quarter-subset of HG002 data on our cluster. If running on a different cluster or with the full dataset, adjust the following parameters in `nextflow_pipeline.sh` and `pipeline.sh`:
+> - `--cpus-per-task` — increase for faster parallel processing
+> - `--mem` — minimum 64GB recommended for the full HG002 dataset
+> - `--time` — minimum 12 hours recommended for the full dataset
+> - `--partition` — set to the appropriate partition on your cluster
+
+---
+
 ## Benchmarking Results (Chr1-22)
 
-Benchmarked against GIAB HG002 NISTv4.2.1 truth set using hap.py with vcfeval engine.
-Note: A quarter subset of the full HG002 dataset was used. Low recall is expected due to limited read coverage across the genome. At full coverage, both tools typically achieve over 99% recall.
+Benchmarked against GIAB HG002 NISTv4.2.1 using hap.py with vcfeval engine, restricted to chromosomes 1-22.
+
+> **Note on recall:** A quarter subset of the full HG002 dataset was used. Low recall is expected — many genomic regions lacked sufficient read coverage to detect variants. At full coverage both tools typically achieve over 99% recall. The precision values however reflect true tool accuracy.
 
 ### SNP Performance
 
@@ -75,20 +101,24 @@ Note: A quarter subset of the full HG002 dataset was used. Low recall is expecte
 
 ### Key Findings
 
-- Clair3 outperformed DeepVariant at this coverage level, achieving higher recall and precision for both SNPs and INDELs
-- DeepVariant called fewer variants overall (163,639 vs 252,391 SNPs) reflecting its more conservative calling strategy
-- Both tools maintained high precision despite low coverage, meaning calls made were mostly correct
-- Low recall is attributed to the quarter-subset dataset — many genomic regions lacked sufficient read depth
+- **Clair3 outperformed DeepVariant** at this coverage level with higher recall and precision for SNPs
+- DeepVariant is more conservative — called fewer variants but with slightly better INDEL precision
+- Both tools showed high precision, meaning the calls they made were mostly correct
+- Low recall is expected and fully explained by the quarter-subset input data
+
+---
 
 ## Repository Contents
 
 | File | Description |
 |------|-------------|
-| variant_calling.nf | Nextflow workflow — runs Clair3 and DeepVariant in parallel |
-| nextflow_pipeline.sh | SLURM job script that executes the Nextflow pipeline |
-| pipeline.sh | SLURM job script for direct Apptainer execution |
-| nextflow.config | Nextflow configuration for Singularity containers |
-| deepvariant.nf | Standalone Nextflow script for DeepVariant |
+| `variant_calling.nf` | Nextflow workflow — runs Clair3 and DeepVariant in parallel via Singularity |
+| `nextflow_pipeline.sh` | SLURM script — submits the Nextflow pipeline to the HPC cluster |
+| `pipeline.sh` | SLURM script — runs the full pipeline directly via Apptainer |
+| `nextflow.config` | Nextflow config — sets up Singularity container binding and run options |
+| `deepvariant.nf` | Standalone Nextflow script for DeepVariant only |
+
+---
 
 ## Tools and Containers
 
@@ -96,15 +126,19 @@ Note: A quarter subset of the full HG002 dataset was used. Low recall is expecte
 |------|---------|-----------|---------|
 | Minimap2 | latest | docker://staphb/minimap2 | Read alignment |
 | Samtools | latest | docker://staphb/samtools | BAM processing |
-| Clair3 | latest | docker://hkubal/clair3 | Variant calling |
-| DeepVariant | 1.6.1 | docker://google/deepvariant:1.6.1 | Variant calling |
-| BCFtools | latest | docker://staphb/bcftools | VCF filtering |
-| hap.py | latest | docker://pkrusche/hap.py | Benchmarking |
+| Clair3 | latest | docker://hkubal/clair3 | Variant calling via Nextflow |
+| DeepVariant | 1.6.1 | docker://google/deepvariant:1.6.1 | Variant calling via Nextflow |
+| BCFtools | latest | docker://staphb/bcftools | VCF filtering chr1-22 |
+| hap.py | latest | docker://pkrusche/hap.py | Benchmarking vs GIAB |
+
+---
 
 ## Data
 
-- Sample: HG002 (Ashkenazi son, GIAB reference sample)
-- Sequencing: PacBio HiFi (Revio chemistry)
-- Input: 25% subset of full dataset (~502MB FASTQ)
-- Reference: GRCh38 (hg38)
-- Truth set: GIAB NISTv4.2.1 (chr1-22, GRCh38)
+| Parameter | Value |
+|-----------|-------|
+| Sample | HG002 (Ashkenazi son, GIAB reference sample) |
+| Sequencing | PacBio HiFi (Revio chemistry) |
+| Input | 25% subset (~502MB FASTQ) |
+| Reference | GRCh38 (hg38) |
+| Truth set | GIAB NISTv4.2.1 (chr1-22, GRCh38) |
