@@ -23,7 +23,9 @@ The pipeline consists of five stages:
 ## How to Run
 
 The entire pipeline is packaged as a SLURM job script. To run it on the HPC cluster:
+```
 sbatch pipeline.sh
+```
 SLURM will allocate the required compute resources (8 CPUs, 32GB RAM) and execute all steps automatically.
 
 ## Results
