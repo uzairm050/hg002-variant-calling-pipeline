@@ -60,18 +60,15 @@ To confirm the full SLURM + Nextflow + Singularity stack works on this cluster, 
 git clone https://github.com/uzairm050/hg002-variant-calling-pipeline.git
 cd hg002-variant-calling-pipeline
 ```
-
 **Step 2 — Submit the pipeline via SLURM + Nextflow + Singularity:**
 ```bash
 sbatch nextflow_pipeline.sh
 ```
-
 **Step 3 — Monitor progress:**
 ```bash
 squeue -u your_username
 tail -f logs/nextflow_*.log
 ```
-
 **Step 4 — Or run directly via SLURM without Nextflow:**
 ```bash
 sbatch pipeline.sh
