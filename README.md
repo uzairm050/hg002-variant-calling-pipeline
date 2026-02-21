@@ -64,7 +64,11 @@ sbatch nextflow_pipeline.sh
 
 **Step 3 — Monitor progress:**
 squeue -u your_username
+
 tail -f logs/nextflow_*.log
+
+**Step 4 — Or run directly via SLURM without Nextflow:**
+sbatch pipeline.sh
 
 > **Resource Note:** The SLURM parameters in the job scripts are configured for a quarter-subset of HG002 data on our cluster. If running on a different cluster or with the full dataset, adjust the following parameters in `nextflow_pipeline.sh` and `pipeline.sh`:
 > - `--cpus-per-task` — increase for faster parallel processing
