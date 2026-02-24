@@ -8,7 +8,7 @@
 
 ---
 
-## What is this project?
+## What is this project About?
 
 This pipeline processes PacBio HiFi sequencing reads from HG002 — a well-studied reference human sample maintained by GIAB — aligns them to the GRCh38 reference genome, calls genetic variants using Clair3, and benchmarks the results against the GIAB v4.2.1 truth set.
 
