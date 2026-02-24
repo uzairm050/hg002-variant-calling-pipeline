@@ -1,7 +1,7 @@
 nextflow.enable.dsl=2
 
 /*
-Pipeline: FASTA + HiFi FASTQQ -> minimap2 (map-hifi) -> samtools sort/index -> Clair3 -> VCF
+Pipeline: FASTA + HiFi FASTQ -> minimap2 (map-hifi) -> samtools sort/index -> Clair3 -> VCF
 Inputs:
   --reference     reference FASTA (GRCh38)
   --reads         HiFi reads FASTQ/FASTQ.GZ (quarter subset of HG002)
