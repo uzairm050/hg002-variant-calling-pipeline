@@ -9,29 +9,13 @@
 
 ---
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Pipeline Architecture](#pipeline-architecture)
-- [Requirements](#requirements)
-- [Repository Structure](#repository-structure)
-- [Quick Start](#quick-start)
-- [Data](#data)
-- [Tools & Containers](#tools--containers)
-- [Results](#results)
-- [Conclusion](#conclusion)
-- [References](#references)
-- [Authors](#authors)
-
----
-
 ## Overview
 
-This pipeline processes PacBio HiFi sequencing reads from **HG002** — the well-characterised Ashkenazi son reference sample maintained by the [Genome in a Bottle (GIAB)](https://www.nist.gov/programs-projects/genome-bottle) consortium. It calls short variants (SNPs and INDELs) across chromosomes 1–22 using two independent deep learning callers and benchmarks accuracy against the GIAB NISTv4.2.1 truth set.
+This pipeline processes PacBio HiFi sequencing reads from **HG002** — the well-characterised Ashkenazi son reference sample maintained by the [Genome in a Bottle (GIAB)](https://www.nist.gov/programs-projects/genome-bottle) consortium. It calls short variants (SNPs and INDELs) across chromosomes 1–22 using two independent deep learning callers and evaluates their accuracy against the GIAB NISTv4.2.1 truth set.
 
-A genetic variant is a position in the genome where an individual's DNA sequence differs from the standard reference. Accurately identifying these variants is fundamental to genomic research and clinical diagnostics — enabling discovery of disease-causing mutations, population-level studies, and personalised medicine.
+A genetic variant is a position in the genome where an individual's DNA differs from the standard reference. Accurately identifying these variants is fundamental to genomic research and clinical diagnostics — enabling discovery of disease-causing mutations, population-level studies, and personalised medicine.
 
-The pipeline is designed for execution on an HPC cluster and leverages **SLURM**, **Nextflow (DSL2)**, and **Singularity/Apptainer** for scalable, fully reproducible analysis across compute nodes.
+The pipeline runs on an HPC cluster and uses **SLURM** for job scheduling, **Nextflow (DSL2)** to orchestrate and parallelise variant calling, and **Singularity/Apptainer** to containerise every tool for fully reproducible execution.
 
 ---
 
@@ -42,50 +26,49 @@ PacBio HiFi FASTQ
         │
         ▼
 ┌──────────────────────────┐
-│  Step 1: Read Alignment  │  Minimap2 (map-hifi preset) → GRCh38
+│  Step 1: Read Alignment  │  Minimap2 (map-hifi preset) → GRCh38   [SLURM]
 └─────────────┬────────────┘
               │
               ▼
 ┌──────────────────────────┐
-│  Step 2: BAM Processing  │  Samtools sort + index
+│  Step 2: BAM Processing  │  Samtools sort + index                  [SLURM]
 └─────────────┬────────────┘
               │
         ┌─────┴──────┐
-        │            │   ← parallel Nextflow processes
+        │            │   ← parallel Nextflow processes (variant_calling.nf)
         ▼            ▼
 ┌────────────┐  ┌─────────────┐
-│   Clair3   │  │ DeepVariant │
-│ (hifi_revio│  │   (v1.6.1)  │
-│  model)    │  │             │
+│   Clair3   │  │ DeepVariant │   [Nextflow + Singularity]
+│ hifi_revio │  │   v1.6.1    │
 └─────┬──────┘  └──────┬──────┘
       │                │
       ▼                ▼
 ┌──────────────────────────┐
-│  Step 3: VCF Filtering   │  BCFtools — restrict to chr1–22
+│  Step 3: VCF Filtering   │  BCFtools — restrict to chr1–22         [SLURM]
 └─────────────┬────────────┘
               │
               ▼
 ┌──────────────────────────┐
-│  Step 4: Benchmarking    │  hap.py (vcfeval engine) vs GIAB NISTv4.2.1
+│  Step 4: Benchmarking    │  hap.py (vcfeval engine) vs GIAB v4.2.1 [SLURM]
 └──────────────────────────┘
 ```
 
-Clair3 and DeepVariant are submitted as parallel Nextflow `process` blocks, each running inside an isolated Singularity container, with the whole workflow submitted to the cluster via `pipeline.sh`.
+Steps 1, 2, 3, and 4 run as SLURM bash steps inside `pipeline.sh`. Clair3 and DeepVariant are defined as independent `process` blocks in `variant_calling.nf` and executed in **parallel** by Nextflow, each inside its own Singularity container. The Nextflow workflow is launched from within the SLURM job via `nextflow run variant_calling.nf`.
 
 ---
 
 ## Requirements
 
-| Requirement | Version |
+| Requirement | Details |
 |---|---|
 | SLURM workload manager | Any recent version |
-| Nextflow | ≥ 22.10 |
+| Nextflow | ≥ 22.10 (DSL2) |
 | Singularity / Apptainer | ≥ 3.0 |
 | CPUs | 8 (allocated by SLURM) |
-| RAM | 32 GB (allocated by SLURM) |
+| RAM | 16 GB (allocated by SLURM) |
 | Storage | ~10 GB for reference + containers |
 
-> All bioinformatics tools run inside Singularity containers — no manual tool installation is required beyond Nextflow and Singularity itself.
+All bioinformatics tools run inside Singularity containers — no manual tool installation is required beyond Nextflow and Singularity.
 
 ---
 
@@ -93,8 +76,8 @@ Clair3 and DeepVariant are submitted as parallel Nextflow `process` blocks, each
 
 ```
 hg002-variant-calling-pipeline/
-├── pipeline.sh        # Main SLURM job script — runs the full pipeline end-to-end
-├── deepvariant.nf     # Nextflow DSL2 workflow for DeepVariant variant calling
+├── pipeline.sh           # SLURM job script — runs alignment, filtering, and benchmarking
+├── variant_calling.nf    # Nextflow DSL2 workflow — runs Clair3 and DeepVariant in parallel
 └── README.md
 ```
 
@@ -127,31 +110,24 @@ OUTDIR=/path/to/output
 sbatch pipeline.sh
 ```
 
-SLURM will allocate the required compute resources and execute all steps in sequence. Nextflow handles parallel execution of Clair3 and DeepVariant within the job.
+SLURM allocates 8 CPUs and 16 GB RAM. After alignment and BAM processing complete, Nextflow is invoked automatically inside the job to run Clair3 and DeepVariant in parallel via `variant_calling.nf`.
 
 ### 4. Monitor progress
 
 ```bash
-# Check job status
-squeue -u $USER
-
-# Stream live log output
-tail -f slurm-*.out
-
-# Check Nextflow process status
-cat .nextflow.log
+squeue -u $USER          # check SLURM job status
+tail -f slurm-*.out      # stream live log output
+cat .nextflow.log        # inspect Nextflow process execution
 ```
 
 ### 5. Outputs
 
-Results are written to `$OUTDIR/` and organised as:
-
 ```
 output/
-├── aligned/           # Sorted, indexed BAM
-├── clair3/            # Clair3 VCF (filtered to chr1–22)
-├── deepvariant/       # DeepVariant VCF (filtered to chr1–22)
-└── benchmark/         # hap.py summary CSV and extended metrics
+├── aligned/        # Sorted, indexed BAM
+├── clair3/         # Clair3 VCF filtered to chr1–22
+├── deepvariant/    # DeepVariant VCF filtered to chr1–22
+└── benchmark/      # hap.py summary CSV and extended metrics
 ```
 
 ---
@@ -166,13 +142,13 @@ output/
 | Reference genome | GRCh38 / hg38 |
 | Truth set | GIAB NISTv4.2.1 (chr1–22, GRCh38) |
 
-The GIAB HG002 dataset is publicly available via the [NCBI SRA](https://www.ncbi.nlm.nih.gov/sra) and [GIAB FTP](https://ftp-trace.ncbi.nlm.nih.gov/giab/ftp/data/AshkenazimTrio/).
+The GIAB HG002 dataset is publicly available via the [GIAB FTP](https://ftp-trace.ncbi.nlm.nih.gov/giab/ftp/data/AshkenazimTrio/).
 
 ---
 
 ## Tools & Containers
 
-All containers are pulled automatically from Docker Hub as Singularity images at runtime. A single all-in-one Singularity container bundling all tools is also available for offline or air-gapped environments.
+All containers are pulled automatically from Docker Hub as Singularity images at runtime by Nextflow. An all-in-one Singularity container bundling all tools is also available for offline or air-gapped environments.
 
 | Tool | Version | Container | Purpose |
 |---|---|---|---|
@@ -187,7 +163,7 @@ All containers are pulled automatically from Docker Hub as Singularity images at
 
 ## Results
 
-> **Note:** These results are from a **25% coverage subset** of the full HG002 dataset. Low recall is expected — many genomic regions lacked sufficient read depth for variant detection. At full coverage, both tools typically achieve **>99% recall** on PacBio HiFi data.
+> **Note:** These results are from a **25% coverage subset** of the full HG002 dataset. Low recall is expected — many genomic regions lacked sufficient read depth. At full coverage, both tools typically achieve **> 99% recall** on PacBio HiFi data.
 
 ### SNP Performance (chr1–22)
 
@@ -235,13 +211,13 @@ Both callers show broadly similar chromosomal distributions. DeepVariant produce
 
 ## Conclusion
 
-This project successfully demonstrates a complete, production-ready variant calling pipeline for PacBio HiFi data on an HPC cluster. By integrating SLURM job scheduling, Nextflow workflow management, and Singularity containerisation, the pipeline achieves full computational reproducibility across different nodes and environments.
+This project successfully implements a complete, end-to-end variant calling pipeline for PacBio HiFi data on an HPC cluster. By combining SLURM job scheduling, Nextflow DSL2 workflow management, and Singularity containerisation, the pipeline achieves full reproducibility — every tool runs in an isolated, version-pinned container, and Nextflow ensures Clair3 and DeepVariant execute in parallel with automatic output management via `publishDir`.
 
-At 25% coverage, **Clair3 outperformed DeepVariant** on both SNP precision (82.5% vs 76.2%) and recall (4.98% vs 3.02%). This is consistent with published observations that Clair3's pileup-based approach is more robust under sparse coverage conditions, where DeepVariant's image-based convolutional model relies more heavily on sufficient read depth to construct informative pileup images. Both tools maintained reasonable precision (65–83%), confirming that variants they did call were largely correct — the primary limitation was missed variants (low recall) due to the reduced dataset size.
+At 25% coverage, **Clair3 outperformed DeepVariant** on both SNP precision (82.5% vs 76.2%) and recall (4.98% vs 3.02%). This aligns with published benchmarks: Clair3's pileup-based two-stage approach is more robust under sparse coverage, whereas DeepVariant's convolutional image-classification model depends more heavily on read depth to construct informative pileup images. Both tools maintained reasonable precision (65–83%), confirming that called variants were largely correct — the primary limitation was missed variants due to the reduced dataset.
 
-DeepVariant showed marginally better INDEL precision (64.9% vs 68.8%), suggesting its model is more conservative and less prone to false insertion/deletion calls even at low depth.
+DeepVariant showed marginally better INDEL false positive control (64.9% vs 68.8% precision), suggesting its model is more conservative for insertion/deletion calls even at low depth.
 
-These results validate the pipeline's correctness and establish a solid baseline for full-coverage analysis. At full sequencing depth, both tools are expected to achieve recall and precision above 99%, consistent with their published benchmarks on PacBio HiFi HG002 data. The pipeline is fully parameterised and can be extended to additional samples, variant callers, or downstream annotation steps with minimal modification.
+At full sequencing depth, both tools are expected to achieve recall and precision exceeding 99%, consistent with their published benchmarks on PacBio HiFi HG002 data. The pipeline is fully parameterised and can be extended to additional samples, variant callers, or downstream annotation workflows with minimal modification.
 
 ---
 
@@ -257,49 +233,13 @@ These results validate the pipeline's correctness and establish a solid baseline
 
 5. **Samtools / BCFtools** — Danecek, P. et al. (2021). Twelve years of SAMtools and BCFtools. *GigaScience*, 10(2), giab008. https://doi.org/10.1093/gigascience/giab008
 
-6. **hap.py benchmarking framework** — Krusche, P. et al. (2019). Best practices for benchmarking germline small-variant calls in human genomes. *Nature Biotechnology*, 37, 555–560. https://doi.org/10.1038/s41587-019-0054-x
+6. **hap.py** — Krusche, P. et al. (2019). Best practices for benchmarking germline small-variant calls in human genomes. *Nature Biotechnology*, 37, 555–560. https://doi.org/10.1038/s41587-019-0054-x
 
 7. **Nextflow** — Di Tommaso, P. et al. (2017). Nextflow enables reproducible computational workflows. *Nature Biotechnology*, 35, 316–319. https://doi.org/10.1038/nbt.3820
 
 8. **Singularity / Apptainer** — Kurtzer, G.M., Sochat, V. & Bauer, M.W. (2017). Singularity: Scientific containers for mobility of compute. *PLOS ONE*, 12(5), e0177459. https://doi.org/10.1371/journal.pone.0177459
 
 9. **GRCh38 Reference Genome** — Schneider, V.A. et al. (2017). Evaluation of GRCh38 and de novo haploid genome assemblies demonstrates the enduring quality of the reference assembly. *Genome Research*, 27(5), 849–864. https://doi.org/10.1101/gr.213611.116
-
----
-
-## Conclusion
-
-This project demonstrates a complete, production-ready variant calling pipeline for PacBio HiFi sequencing data, executed on an HPC cluster using industry-standard tools and a fully containerised, reproducible environment.
-
-At 25% coverage, **Clair3 outperformed DeepVariant** across all key SNP metrics — achieving 82.5% precision and 4.98% recall versus 76.2% and 3.02% for DeepVariant. This is consistent with findings in the literature: Clair3's pileup-based neural network approach degrades more gracefully at low sequencing depth, whereas DeepVariant's image-classification model relies more heavily on sufficient coverage for confident predictions. For INDELs, both tools performed comparably, with DeepVariant showing a marginally lower false positive rate.
-
-The low recall figures across both tools are an expected consequence of the subsampled dataset and are not indicative of tool failure. At full HG002 coverage, both Clair3 and DeepVariant are well-established to exceed 99% recall on PacBio HiFi data, as validated extensively by the GIAB consortium.
-
-The pipeline's modular design — with alignment, variant calling, filtering, and benchmarking as independent stages — makes it straightforward to swap in alternative tools (e.g., PEPPER-Margin-DeepVariant, pbsv for structural variants) or scale to full-coverage datasets with no changes to the workflow architecture. The use of Nextflow with Singularity containers ensures that all results are fully reproducible across different compute nodes and HPC environments.
-
----
-
-## References
-
-1. **Clair3** — Zheng, Z. et al. (2022). Symphonizing pileup and full-alignment for deep learning-based long-read variant calling. *Nature Computational Science*, 2, 797–803. https://doi.org/10.1038/s43588-022-00387-x
-
-2. **DeepVariant** — Poplin, R. et al. (2018). A universal SNP and small-indel variant caller using deep neural networks. *Nature Biotechnology*, 36, 983–987. https://doi.org/10.1038/nbt.4235
-
-3. **GIAB HG002 Truth Set** — Zook, J.M. et al. (2020). A robust benchmark for detection of germline large deletions and insertions. *Nature Biotechnology*, 38, 1347–1355. https://doi.org/10.1038/s41587-020-0538-8
-
-4. **Minimap2** — Li, H. (2018). Minimap2: pairwise alignment for nucleotide sequences. *Bioinformatics*, 34(18), 3094–3100. https://doi.org/10.1093/bioinformatics/bty191
-
-5. **Samtools / HTSlib** — Danecek, P. et al. (2021). Twelve years of SAMtools and HTSlib. *GigaScience*, 10(2), giab008. https://doi.org/10.1093/gigascience/giab008
-
-6. **BCFtools** — Danecek, P. et al. (2021). Twelve years of SAMtools and HTSlib. *GigaScience*, 10(2), giab008. https://doi.org/10.1093/gigascience/giab008
-
-7. **hap.py benchmarking framework** — Krusche, P. et al. (2019). Best practices for benchmarking germline small-variant calls in human genomes. *Nature Biotechnology*, 37, 555–560. https://doi.org/10.1038/s41587-019-0054-x
-
-8. **Nextflow** — Di Tommaso, P. et al. (2017). Nextflow enables reproducible computational workflows. *Nature Biotechnology*, 35, 316–319. https://doi.org/10.1038/nbt.3820
-
-9. **Singularity / Apptainer** — Kurtzer, G.M. et al. (2017). Singularity: Scientific containers for mobility of compute. *PLOS ONE*, 12(5), e0177459. https://doi.org/10.1371/journal.pone.0177459
-
-10. **GRCh38 Reference Genome** — Schneider, V.A. et al. (2017). Evaluation of GRCh38 and de novo haploid genome assemblies demonstrates the enduring quality of the reference assembly. *Genome Research*, 27(5), 849–864. https://doi.org/10.1101/gr.213611.116
 
 ---
 
