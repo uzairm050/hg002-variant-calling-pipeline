@@ -219,36 +219,4 @@ DeepVariant showed marginally better INDEL false positive control (64.9% vs 68.8
 
 At full sequencing depth, both tools are expected to achieve recall and precision exceeding 99%, consistent with their published benchmarks on PacBio HiFi HG002 data. The pipeline is fully parameterised and can be extended to additional samples, variant callers, or downstream annotation workflows with minimal modification.
 
----
 
-## References
-
-1. **Clair3** — Zheng, Z. et al. (2022). Symphonizing pileup and full-alignment for deep learning-based long-read variant calling. *Nature Computational Science*, 2, 797–803. https://doi.org/10.1038/s43588-022-00387-x
-
-2. **DeepVariant** — Poplin, R. et al. (2018). A universal SNP and small-indel variant caller using deep neural networks. *Nature Biotechnology*, 36, 983–987. https://doi.org/10.1038/nbt.4235
-
-3. **GIAB HG002 Truth Set** — Zook, J.M. et al. (2020). A robust benchmark for detection of germline large deletions and insertions. *Nature Biotechnology*, 38, 1347–1355. https://doi.org/10.1038/s41587-020-0538-8
-
-4. **Minimap2** — Li, H. (2018). Minimap2: pairwise alignment for nucleotide sequences. *Bioinformatics*, 34(18), 3094–3100. https://doi.org/10.1093/bioinformatics/bty191
-
-5. **Samtools / BCFtools** — Danecek, P. et al. (2021). Twelve years of SAMtools and BCFtools. *GigaScience*, 10(2), giab008. https://doi.org/10.1093/gigascience/giab008
-
-6. **hap.py** — Krusche, P. et al. (2019). Best practices for benchmarking germline small-variant calls in human genomes. *Nature Biotechnology*, 37, 555–560. https://doi.org/10.1038/s41587-019-0054-x
-
-7. **Nextflow** — Di Tommaso, P. et al. (2017). Nextflow enables reproducible computational workflows. *Nature Biotechnology*, 35, 316–319. https://doi.org/10.1038/nbt.3820
-
-8. **Singularity / Apptainer** — Kurtzer, G.M., Sochat, V. & Bauer, M.W. (2017). Singularity: Scientific containers for mobility of compute. *PLOS ONE*, 12(5), e0177459. https://doi.org/10.1371/journal.pone.0177459
-
-9. **GRCh38 Reference Genome** — Schneider, V.A. et al. (2017). Evaluation of GRCh38 and de novo haploid genome assemblies demonstrates the enduring quality of the reference assembly. *Genome Research*, 27(5), 849–864. https://doi.org/10.1101/gr.213611.116
-
----
-
-## Authors
-
-**Uzair Malik · Sana Khalid · Javeria Butt**
-
-*Advanced Computational Biology — Assignment No. 1 · February 2026*
-
-**Related repositories:**
-- [SanaKhalid17/HG002-PacBio-HiFi-Variant-Calling-Pipeline-Clair3-vs-DeepVariant](https://github.com/SanaKhalid17/HG002-PacBio-HiFi-Variant-Calling-Pipeline-Clair3-vs-DeepVariant-)
-- [javeria-butt/hg002-variant-calling-pipeline](https://github.com/javeria-butt/hg002-variant-calling-pipeline)
