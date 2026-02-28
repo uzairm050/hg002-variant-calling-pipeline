@@ -1,13 +1,21 @@
 nextflow.enable.dsl=2
 
 /*
-Pipeline: FASTA + HiFi FASTQ -> minimap2 (map-hifi) -> samtools sort/index -> Clair3 -> VCF
+Pipeline: GRCh38 FASTA + HiFi FASTQ -> minimap2 (map-hifi) -> samtools sort/index -> Clair3 -> VCF
 Inputs:
   --reference     reference FASTA (GRCh38)
   --reads         HiFi reads FASTQ/FASTQ.GZ (quarter subset of HG002)
   --model_path    Clair3 model directory for HiFi (hifi_revio)
 Outputs:
   outdir/<sample>.sorted.bam(.bai) + outdir/<sample>.vcf.gz(.tbi)
+
+Run with:
+  nextflow run main.nf -profile slurm \
+    --reference /path/to/GRCh38.fa \
+    --reads     /path/to/HG002_quarter.fastq.gz \
+    --model_path /path/to/models/hifi_revio \
+    --sample    HG002 \
+    --outdir    /path/to/results
 */
 
 if( !params.reference )  error "Missing --reference"
@@ -19,7 +27,7 @@ Channel.fromPath(params.reads).set { ch_reads }
 
 def inferSampleName(readsFile) {
   def base = readsFile.getBaseName()
-  base = base.replaceAll(/(\.fastq|\.fq)$/,'')
+  base = base.replaceAll(/(\.fastq|\.fq)$/, '')
   return base
 }
 
@@ -39,21 +47,24 @@ workflow {
 process SETUP_CHECK {
   tag { sample }
   container minimap2_container
+
   input:
     path ref_fa
     path reads
     val  sample
+
   output:
     val(true)
+
   script:
     """
     set -euo pipefail
     echo "=== SETUP CHECK ==="
-    echo "Sample: ${sample}"
-    echo "Reference: ${ref_fa}"
-    echo "Reads: ${reads}"
-    echo "Platform: ${params.platform}"
-    echo "Minimap2 preset: ${params.minimap2_preset}"
+    echo "Sample      : ${sample}"
+    echo "Reference   : ${ref_fa}"
+    echo "Reads       : ${reads}"
+    echo "Platform    : ${params.platform}"
+    echo "Minimap2    : ${params.minimap2_preset}"
     echo ""
     test -s "${ref_fa}" || { echo "ERROR: reference FASTA is missing/empty"; exit 1; }
     test -s "${reads}"  || { echo "ERROR: reads FASTQ is missing/empty"; exit 1; }
@@ -70,10 +81,13 @@ process SETUP_CHECK {
 process INDEX_REF_MINIMAP2 {
   tag "ref_index"
   container minimap2_container
+
   input:
     path ref_fa
+
   output:
     path "reference.mmi", emit: mmi
+
   script:
     """
     set -euo pipefail
@@ -85,13 +99,16 @@ process ALIGN_MINIMAP2 {
   tag { sample }
   publishDir params.outdir, mode: 'copy'
   container minimap2_container
+
   input:
     path reads
     path mmi
     path ref_fa
     val  sample
+
   output:
     path "${sample}.sam", emit: sam
+
   script:
     """
     set -euo pipefail
@@ -103,16 +120,19 @@ process SORT_INDEX_SAMTOOLS {
   tag { sample }
   publishDir params.outdir, mode: 'copy'
   container samtools_container
+
   input:
     path sam
     val  sample
+
   output:
-    path "${sample}.sorted.bam", emit: bam
+    path "${sample}.sorted.bam",     emit: bam
     path "${sample}.sorted.bam.bai", emit: bai
+
   script:
     """
     set -euo pipefail
-    samtools sort -@ ${task.cpus} -o ${sample}.sorted.bam ${sam}
+    samtools sort  -@ ${task.cpus} -o ${sample}.sorted.bam ${sam}
     samtools index -@ ${task.cpus} ${sample}.sorted.bam
     """
 }
@@ -121,28 +141,32 @@ process CALL_VARIANTS_CLAIR3 {
   tag { sample }
   publishDir params.outdir, mode: 'copy'
   container clair3_container
+
   input:
     path bam
     path bai
     path ref_fa
     val  sample
+
   output:
     path "${sample}.vcf.gz"
     path "${sample}.vcf.gz.tbi"
+
   script:
     """
     set -euo pipefail
     mkdir -p clair3_out
     run_clair3.sh \
-      --bam_fn ${bam} \
-      --ref_fn ${ref_fa} \
-      --threads ${task.cpus} \
-      --platform ${params.platform} \
+      --bam_fn     ${bam} \
+      --ref_fn     ${ref_fa} \
+      --threads    ${task.cpus} \
+      --platform   ${params.platform} \
       --model_path ${params.model_path} \
-      --output clair3_out \
+      --output     clair3_out \
       ${params.clair3_args}
+
     if [ -f clair3_out/merge_output.vcf.gz ]; then
-      cp clair3_out/merge_output.vcf.gz ${sample}.vcf.gz
+      cp clair3_out/merge_output.vcf.gz     ${sample}.vcf.gz
       cp clair3_out/merge_output.vcf.gz.tbi ${sample}.vcf.gz.tbi
     else
       vcf=\$(find clair3_out -maxdepth 4 -name "*.vcf.gz" | head -n 1)
