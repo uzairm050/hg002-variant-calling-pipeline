@@ -13,7 +13,7 @@
 
 This pipeline processes PacBio HiFi sequencing reads from **HG002** — the well-characterised Ashkenazi son reference sample maintained by the [Genome in a Bottle (GIAB)](https://www.nist.gov/programs-projects/genome-bottle) consortium. It calls short variants (SNPs and INDELs) across chromosomes 1–22 using two independent deep learning callers — **Clair3** and **DeepVariant** — and evaluates accuracy against the GIAB NISTv4.2.1 truth set.
 
-The entire pipeline is orchestrated by **Nextflow DSL2**. Every process — alignment, sorting, and variant calling — runs inside an isolated **Singularity** container, ensuring full reproducibility across HPC compute nodes. The pipeline is launched with a single shell script (`pipeline.sh`) that calls `nextflow run main.nf`.
+The entire pipeline is orchestrated by **Nextflow DSL2**. Every process — alignment, sorting, and variant calling — runs inside an isolated **Singularity** container, ensuring full reproducibility across HPC compute nodes. The pipeline is launched with a single shell script (`run_pipeline.sh`) that calls `nextflow run main.nf`.
 
 ---
 
@@ -67,7 +67,7 @@ DeepVariant run separately via deepvariant.nf (same Nextflow + Singularity appro
 └─────────────────────┘
 ```
 
-`pipeline.sh` is a thin launcher — it simply calls `nextflow run main.nf -profile singularity` with the correct parameters. All compute logic lives inside the Nextflow workflow.
+`run_pipeline.sh` is a thin launcher — it simply calls `nextflow run main.nf -profile singularity` with the correct parameters. All compute logic lives inside the Nextflow workflow.
 
 ---
 
@@ -78,7 +78,7 @@ hg002-variant-calling-pipeline/
 ├── main.nf           # Nextflow DSL2 workflow: SETUP_CHECK → INDEX → ALIGN → SORT → CLAIR3
 ├── deepvariant.nf    # Nextflow DSL2 workflow: DeepVariant variant calling
 ├── nextflow.config   # Singularity profile, per-process resource limits, all params
-├── pipeline.sh       # Launch script: calls nextflow run main.nf -profile singularity
+├── run_pipeline.sh       # Launch script: calls nextflow run main.nf -profile singularity
 └── README.md
 ```
 
@@ -107,7 +107,7 @@ git clone https://github.com/uzairm050/hg002-variant-calling-pipeline.git
 cd hg002-variant-calling-pipeline
 ```
 
-### 2. Edit paths in `pipeline.sh`
+### 2. Edit paths in `run_pipeline.sh`
 
 ```bash
 BASEDIR=/your/working/directory
@@ -125,10 +125,10 @@ nextflow run main.nf -profile singularity \
 
 ```bash
 # Run directly
-bash pipeline.sh
+bash run_pipeline.sh
 
 # Or submit to SLURM
-sbatch --cpus-per-task=8 --mem=32G --time=24:00:00 pipeline.sh
+sbatch --cpus-per-task=8 --mem=32G --time=24:00:00 run_pipeline.sh
 ```
 
 ### 4. Monitor
